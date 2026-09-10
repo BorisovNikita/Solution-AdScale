@@ -1,0 +1,75 @@
+@startuml
+!define table(x) class x << (T,#FFAAAA) >>
+
+table(Campaign) {
+  + id : UUID <<PK>>
+  + name : VARCHAR
+  + advertiser_id : UUID
+  + total_budget : DECIMAL
+  + daily_budget : DECIMAL
+  + start_date : TIMESTAMP
+  + end_date : TIMESTAMP
+  + targeting_rules : JSON
+  + status : VARCHAR
+  + created_at : TIMESTAMP
+  + updated_at : TIMESTAMP
+}
+
+table(Ad) {
+  + id : UUID <<PK>>
+  + campaign_id : UUID <<FK>>
+  + creative_url : VARCHAR
+  + base_bid : DECIMAL
+  + targeting : JSON
+  + status : VARCHAR
+  + created_at : TIMESTAMP
+}
+
+table(BidModifier) {
+  + id : UUID <<PK>>
+  + ad_id : UUID <<FK>>
+  + condition_type : VARCHAR   // time, geo, device, gender, ...
+  + condition_value : JSON     // например, {hours: "09-17", days: "mon-fri"}
+  + multiplier : DECIMAL
+  + priority : INT
+}
+
+table(AuctionLog) {
+  + id : BIGSERIAL <<PK>>
+  + request_id : UUID
+  + ad_id : UUID <<FK>>
+  + campaign_id : UUID <<FK>>
+  + win_price : DECIMAL
+  + user_id : VARCHAR (hashed)
+  + timestamp : TIMESTAMP
+  + context : JSON   // устройство, гео, и т.д.
+}
+
+table(BudgetDaily) {
+  + campaign_id : UUID <<PK>>
+  + date : DATE <<PK>>
+  + spent : DECIMAL
+  + limit : DECIMAL
+}
+
+Campaign ||--o{ Ad : "содержит"
+Ad ||--o{ BidModifier : "имеет"
+Ad }o--o{ AuctionLog : "участвует"
+Campaign ||--o{ BudgetDaily : "лимит"
+
+note right of Campaign
+  targeting_rules могут содержать
+  глобальные ограничения (гео, возраст)
+end note
+
+note right of BidModifier
+  Условия и множители,
+  применяемые к базовой ставке
+end note
+
+note right of AuctionLog
+  Историческая запись для
+  финансов и аналитики
+end note
+
+@enduml
