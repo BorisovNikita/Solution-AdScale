@@ -1,0 +1,46 @@
+@startuml
+title Последовательность обработки bid-запроса (через API Gateway)
+
+actor "DSP" as DSP
+participant "API Gateway" as Gateway
+participant "Ad Server" as AdServer
+participant "Bidding Service" as Bidding
+participant "Redis" as Redis
+participant "PostgreSQL" as DB
+participant "Kafka" as Kafka
+
+DSP -> Gateway: POST /rtb/bid (OpenRTB)
+activate Gateway
+
+Gateway -> Gateway: Аутентификация, rate limiting
+Gateway -> AdServer: Forward bid request (gRPC/HTTP)
+activate AdServer
+
+AdServer -> AdServer: Определение пользователя, фильтрация кандидатов
+AdServer -> Bidding: PlaceBid (gRPC) с кандидатами
+activate Bidding
+
+Bidding -> Redis: Получить данные кампаний, ставок, таргетинг (mget)
+Redis --> Bidding: Данные (кэш)
+
+alt cache miss
+    Bidding -> DB: SELECT кампании, ставки
+    DB --> Bidding: Данные
+    Bidding -> Redis: Сохранить в кэш (с TTL)
+end
+
+Bidding -> Bidding: Расчёт ставок, определение победителя
+Bidding --> AdServer: BidResponse (победитель, цена)
+deactivate Bidding
+
+AdServer --> Gateway: Ответ (с winner)
+deactivate AdServer
+
+Gateway --> DSP: BidResponse (OpenRTB)
+deactivate Gateway
+
+' Асинхронная публикация события
+Bidding -> Kafka: Отправить AuctionWon событие (асинхронно)
+note right: Для финансов и аналитики
+
+@enduml

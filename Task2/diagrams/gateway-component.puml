@@ -1,0 +1,34 @@
+@startuml
+title Компоненты API Gateway для DSP
+
+package "API Gateway (Envoy)" {
+    [Rate Limiter] as RL
+    [Auth] as Auth
+    [Circuit Breaker] as CB
+    [Metrics Collector] as Metrics
+    [Router] as Router
+}
+
+package "Backend Services" {
+    [Ad Server] as AdS
+    [Bidding Service] as BS
+    [Redis Cache] as Cache
+}
+
+database "DSP white-list" as WhiteList
+database "Redis (rate limit counters)" as RateStore
+
+"External DSP" --> Router : HTTPS / OpenRTB
+Router --> Auth : validate API key
+Auth --> WhiteList : lookup
+Router --> RL : check quota
+RL --> RateStore : increment counters
+Router --> CB : call backend
+CB --> AdS : route (if healthy)
+CB --> BS : alternative (if AdS fails)
+CB --> Cache : fallback (cached bid)
+
+Metrics --> Prometheus : export
+note right: latency, error rates, circuit state
+
+@enduml

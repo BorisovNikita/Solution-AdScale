@@ -1,0 +1,57 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+LAYOUT_LEFT_RIGHT()
+
+title C4 Container Diagram — AdScale (TO-BE, DB-per-service)
+
+Person(advertiser, "Рекламодатель")
+Person_Ext(endUser, "Пользователь сайта/приложения")
+System_Ext(dspPartner, "DSP-партнер", "OpenRTB")
+System_Ext(paymentGateway, "Платежный шлюз")
+
+System_Boundary(adscale, "AdScale Platform") {
+    Container(apiGateway, "API Gateway", "Envoy/Kong", "Маршрутизация, аутентификация")
+
+    Container(adSelection, "Рекламный сервер", "Go", "Подбор кандидатов")
+    Container(bidding, "Сервер аукциона", "C++", "Расчет ставок, аукцион") <<Critical>>
+    Container(delivery, "Сервис выдачи", "Node.js", "Генерация разметки")
+    Container(stats, "Сервис статистики", "Python", "Обработка событий")
+    Container(analytics, "Сервис аналитики", "Python", "Построение отчетов")
+    Container(finance, "Финансовый сервис", "Go", "Балансы, транзакции")
+    Container(dashboard, "Рекламный кабинет", "Node.js", "UI для рекламодателей")
+
+    Container(redis, "Redis", "In-memory cache", "Кэш данных аукциона")
+    Container(kafka, "Kafka", "Message broker", "Потоковая обработка")
+
+    ContainerDb(campaignDb, "Campaign DB", "PostgreSQL", "Кампании и таргетинг (Ad Server)")
+    ContainerDb(auctionDb, "Auction DB", "PostgreSQL", "Ставки и результаты аукциона (Auction Server)")
+    ContainerDb(statsDb, "Statistics DB", "ClickHouse", "События показов/кликов (Statistics Service)")
+    ContainerDb(analyticsDb, "Analytics DB", "ClickHouse", "Агрегаты и отчеты (Analytics Service)")
+    ContainerDb(financeDb, "Finance DB", "PostgreSQL (sharded)", "Балансы и транзакции (Finance Service)")
+}
+
+Rel_U(dspPartner, apiGateway, "Bid request/response", "HTTPS/OpenRTB")
+Rel_U(endUser, apiGateway, "Запросы на показ/клики", "HTTPS")
+Rel(advertiser, dashboard, "Управление кампаниями", "HTTPS")
+Rel(dashboard, apiGateway, "Все запросы", "HTTPS")
+Rel(apiGateway, paymentGateway, "Пополнение бюджета", "REST")
+
+Rel(apiGateway, adSelection, "Bid request", "gRPC")
+Rel(adSelection, bidding, "Кандидаты", "gRPC")
+Rel(bidding, redis, "Чтение кэша", "Redis protocol")
+Rel(bidding, auctionDb, "Чтение/запись результатов", "JDBC")
+Rel(adSelection, campaignDb, "Чтение/запись кампаний", "JDBC")
+Rel(apiGateway, delivery, "Запрос на показ", "HTTP")
+Rel(apiGateway, finance, "Финансовые операции", "gRPC")
+Rel(apiGateway, analytics, "Запросы отчетности", "HTTP")
+Rel(finance, financeDb, "Транзакции", "JDBC")
+
+Rel(delivery, kafka, "События показов/кликов", "Producer")
+Rel(kafka, stats, "Потребление событий", "Consumer")
+Rel(stats, statsDb, "Запись событий", "JDBC")
+Rel(kafka, analytics, "Потребление событий", "Consumer")
+Rel(analytics, analyticsDb, "Запись агрегатов / чтение отчетов", "JDBC")
+
+@enduml
